@@ -1,66 +1,73 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-// Structure definition
-typedef struct {
-    char *args[64];   // stores words/arguments
-    int count;        // number of words
-} Command;
-
-// Function to split the input line into words
-void parse_command(char *line, Command *cmd)
-{
-    cmd->count = 0;
-
-    char *token = strtok(line, " \t");
-
-    while (token != NULL && cmd->count < 63)
-    {
-        cmd->args[cmd->count] = token;
-        cmd->count++;
-
-        token = strtok(NULL, " \t");
-    }
-
-    cmd->args[cmd->count] = NULL;
-}
+#include <unistd.h>
+#include <sys/wait.h>
 
 int main(void)
 {
     char *line = NULL;
     size_t len = 0;
 
-    Command cmd;
+    char *args[64];
 
     while (1)
     {
+        // Display prompt
         printf("shellforge$ ");
         fflush(stdout);
 
+        // Ctrl+D
         if (getline(&line, &len, stdin) == -1)
             break;
 
         // Remove newline
-        if (strlen(line) > 0 &&
-            line[strlen(line) - 1] == '\n')
+        line[strcspn(line, "\n")] = '\0';
+
+        int i = 0;
+
+        // Split line into words
+        char *token = strtok(line, " \t");
+
+        while (token != NULL && i < 63)
         {
-            line[strlen(line) - 1] = '\0';
+            args[i++] = token;
+            token = strtok(NULL, " \t");
         }
 
-        // Organize the command
-        parse_command(line, &cmd);
+        // NULL termination
+        args[i] = NULL;
 
-        // If nothing was entered
-        if (cmd.count == 0)
+        // Empty input
+        if (i == 0)
             continue;
 
-        // Exit command
-        if (strcmp(cmd.args[0], "exit") == 0)
+        // Exit
+        if (strcmp(args[0], "exit") == 0)
             break;
 
-        printf("Structure Log -> command : %s | Arguments found: %d\n",
-               cmd.args[0], cmd.count - 1);
+        // Create child process
+        pid_t pid = fork();
+
+        if (pid == 0)
+        {
+            // Child process
+            execvp(args[0], args);
+
+            // Runs only if execvp fails
+            perror("Command execution error");
+            exit(1);
+        }
+        else if (pid > 0)
+        {
+            // Parent process waits for child
+            waitpid(pid, NULL, 0);
+        }
+        else
+        {
+            // fork failed
+            perror("Fork creation error");
+        }
     }
 
     free(line);
